@@ -5,6 +5,7 @@
   "author": "Joshua Trujillo <Jtriley15@gmail.com>",
   "license": "MIT",
   "devDependencies": {
+    "@openzeppelin/contracts-upgradeable": "^4.6.0",
     "@superfluid-finance/ethereum-contracts": "^1.2.2"
   }
 }

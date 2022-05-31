@@ -5,7 +5,8 @@ libs = ['lib', 'node_modules']
 remappings = [
     'std=lib/forge-std/src/',
     'nxtp=lib/nxtp/packages/deployments/contracts/contracts/',
-    'sf=node_modules/@superfluid-finance/ethereum-contracts/contracts/'
+    'sf=node_modules/@superfluid-finance/ethereum-contracts/contracts/',
+    'oz=node_modules/@openzeppelin/contracts/'
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
