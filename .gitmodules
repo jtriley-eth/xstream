@@ -4,3 +4,6 @@
 [submodule "lib/nxtp"]
 	path = lib/nxtp
 	url = https://github.com/connext/nxtp
+[submodule "lib/solmate"]
+	path = lib/solmate
+	url = https://github.com/Rari-Capital/solmate
