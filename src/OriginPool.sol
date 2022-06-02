@@ -17,25 +17,45 @@ error InvalidAgreement();
 error InvalidToken();
 error StreamAlreadyActive();
 
+/// @title Origin Pool to Receive Streams.
+/// @author jtriley.eth
+/// @notice This is a super app. On stream (create|update|delete), this contract sends a message
+/// accross the bridge to the DestinationPool.
 contract OriginPool {
+
+    /// @dev Emitted when flow message is sent across the bridge.
+    /// @param account Streamer account (only one-to-one address streaming for now).
+    /// @param flowRate Flow Rate, unadjusted to the pool.
     event FlowMessageSent(
         address indexed account,
-        int96 flowRate,
-        int96 flowRateAdjusted
+        int96 flowRate
     );
 
+    /// @dev Emitted when rebalance message is sent across the bridge.
+    /// @param amount Amount rebalanced (sent).
     event RebalanceMessageSent(uint256 amount);
 
+    /// @dev Nomad Domain of this contract.
     uint32 public immutable originDomain;
+
+    /// @dev Nomad Domain of the destination contract.
     uint32 public immutable destinationDomain;
 
+    /// @dev Destination contract address
     address public immutable destination;
+
+    /// @dev Connext contracts.
     IConnextHandler public immutable connext;
     IExecutor public immutable executor;
+
+    /// @dev Superfluid contracts.
     ISuperfluid public immutable host;
     IConstantFlowAgreementV1 public immutable cfa;
     ISuperToken public immutable token;
 
+    /// @dev Validates callbacks.
+    /// @param _agreementClass MUST be CFA.
+    /// @param _token MUST be supported token.
     modifier isCallbackValid(address _agreementClass, ISuperToken _token) {
         if (msg.sender != address(host)) revert Unauthorized();
         if (_agreementClass != address(cfa)) revert InvalidAgreement();
@@ -64,6 +84,7 @@ contract OriginPool {
         // surely this can't go wrong
         ERC20(_token.getUnderlyingToken()).approve(address(_connext), type(uint256).max);
 
+        // register app
         _host.registerApp(
             SuperAppDefinitions.APP_LEVEL_FINAL |
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
@@ -75,6 +96,8 @@ contract OriginPool {
     // //////////////////////////////////////////////////////////////
     // REBALANCER
     // //////////////////////////////////////////////////////////////
+
+    /// @dev Rebalances pools. This sends funds over the bridge to the destination.
     function rebalance() external {
         _sendRebalanceMessage();
     }
@@ -134,15 +157,20 @@ contract OriginPool {
     // //////////////////////////////////////////////////////////////
     // MESSAGE SENDERS
     // //////////////////////////////////////////////////////////////
+
+    /// @dev Sends rebalance message with the full balance of this pool. No need to collect dust.
     function _sendRebalanceMessage() internal {
         uint256 balance = token.balanceOf(address(this));
 
+        // downgrade for sending across the bridge
+        token.downgrade(balance);
+
+        // encode call
         bytes memory callData = abi.encodeWithSelector(
             IDestinationPool.receiveRebalanceMessage.selector
         );
 
-        token.downgrade(balance);
-
+        // partial call params
         CallParams memory params = CallParams({
             to: destination,
             callData: callData,
@@ -155,6 +183,7 @@ contract OriginPool {
             receiveLocal: false
         });
 
+        // full call params
         XCallArgs memory xCallArgs = XCallArgs({
             params: params,
             transactingAssetId: token.getUnderlyingToken(),
@@ -162,11 +191,15 @@ contract OriginPool {
             relayerFee: 0
         });
 
+        // call that thang
         connext.xcall(xCallArgs);
 
         emit RebalanceMessageSent(balance);
     }
 
+    /// @dev Sends the flow message across the bridge.
+    /// @param account The account streaming.
+    /// @param flowRate Flow rate, unadjusted.
     function _sendFlowMessage(address account, int96 flowRate) internal {
         uint256 buffer;
 
@@ -179,11 +212,13 @@ contract OriginPool {
             token.downgrade(buffer);
         }
 
+        // encode call
         bytes memory callData = abi.encodeCall(
             IDestinationPool(destination).receiveFlowMessage,
             (account, flowRate)
         );
 
+        // partial call params
         CallParams memory params = CallParams({
             to: destination,
             callData: callData,
@@ -196,6 +231,7 @@ contract OriginPool {
             receiveLocal: false
         });
 
+        // full call params
         XCallArgs memory xCallArgs = XCallArgs({
             params: params,
             transactingAssetId: token.getUnderlyingToken(),
@@ -203,8 +239,9 @@ contract OriginPool {
             relayerFee: 0
         });
 
+        // call that thang
         connext.xcall(xCallArgs);
 
-        emit FlowMessageSent(account, flowRate, flowRate);
+        emit FlowMessageSent(account, flowRate);
     }
 }

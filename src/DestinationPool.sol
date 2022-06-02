@@ -14,25 +14,43 @@ error InvalidDomain();
 error InvalidOriginContract();
 
 contract DestinationPool is IDestinationPool, ERC4626 {
+
+    /// @dev Emitted when connext delivers a flow message.
+    /// @param account Account to stream to.
+    /// @param flowRate Adjusted flow rate.
     event FlowMessageReceived(
         address indexed account,
         int96 flowRate
     );
 
+    /// @dev Emitted when connext delivers a rebalance message. // TODO Add amount?
     event RebalanceMessageReceived();
 
+    /// @dev Nomad domain of origin contract.
     uint32 public immutable originDomain;
+
+    /// @dev Origin contract address.
     address public immutable originContract;
 
+    /// @dev Connext executor.
     IExecutor public immutable executor;
+
+    /// @dev Superfluid contracts.
     ISuperfluid public immutable host;
     IConstantFlowAgreementV1 public immutable cfa;
     ISuperToken public immutable token;
 
+    /// @dev Virtual "flow rate" of fees being accrued in real time.
     int96 public feeAccrualRate;
+
+    /// @dev Last update's timestamp of the `feeAccrualRate`.
     uint256 public lastFeeAccrualUpdate;
+
+    /// @dev Fees pending that are NOT included in the `feeAccrualRate`
+    // TODO this might not be necessary since the full balance is sent on flow update.
     uint256 public feesPending;
 
+    /// @dev Validates message sender, origin, and originContract.
     modifier isMessageValid() {
         if (msg.sender != address(executor)) revert Unauthorized();
         if (executor.origin() != originDomain) revert InvalidDomain();
@@ -49,7 +67,9 @@ contract DestinationPool is IDestinationPool, ERC4626 {
         ISuperToken _token
     ) ERC4626(
         ERC20(address(_token)),
+        // xPool Super DAI
         string(abi.encodePacked("xPool ", _token.name())),
+        // xpDAIx // kek
         string(abi.encodePacked("xp", _token.symbol()))
     ) {
         originDomain = _originDomain;
@@ -66,6 +86,8 @@ contract DestinationPool is IDestinationPool, ERC4626 {
     // //////////////////////////////////////////////////////////////
     // ERC4626 OVERRIDES
     // //////////////////////////////////////////////////////////////
+
+    /// @dev Total assets including fees not yet rebalanced.
     function totalAssets() public view override returns (uint256) {
         uint256 balance = token.balanceOf(address(this));
 
@@ -78,6 +100,10 @@ contract DestinationPool is IDestinationPool, ERC4626 {
     // //////////////////////////////////////////////////////////////
     // MESSAGE RECEIVERS
     // //////////////////////////////////////////////////////////////
+
+    /// @dev Flow message receiver.
+    /// @param account Account streaming.
+    /// @param flowRate Unadjusted flow rate.
     function receiveFlowMessage(address account, int96 flowRate)
         external
         override
@@ -127,6 +153,7 @@ contract DestinationPool is IDestinationPool, ERC4626 {
         emit FlowMessageReceived(account, flowRateAdjusted);
     }
 
+    /// @dev Rebalance message receiver.
     function receiveRebalanceMessage() external override isMessageValid {
         uint256 underlyingBalance = ERC20(token.getUnderlyingToken()).balanceOf(address(this));
 
@@ -141,10 +168,12 @@ contract DestinationPool is IDestinationPool, ERC4626 {
         emit RebalanceMessageReceived();
     }
 
+    /// @dev Updates the pending fees on a rebalance call.
     function _updatePendingFees(uint256 received) internal {
         feesPending -= received;
     }
 
+    /// @dev Updates the pending fees, feeAccrualRate, and lastFeeAccrualUpdate on a flow call.
     function _updateFeeFlowRate(int96 feeFlowRate) internal {
         feesPending += uint256(uint96(feeFlowRate)) * (lastFeeAccrualUpdate * block.timestamp);
 
