@@ -2,3 +2,4 @@ std=lib/forge-std/src/
 nxtp=lib/nxtp/packages/deployments/contracts/contracts/
 sf=node_modules/@superfluid-finance/ethereum-contracts/contracts/
 oz=node_modules/@openzeppelin/contracts/
+solmate=lib/solmate/src/

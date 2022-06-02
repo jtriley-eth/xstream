@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPLv3
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.13;
 
-import {IERC20} from "oz/token/ERC20/IERC20.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IDestinationPool} from "./interfaces/IDestinationPool.sol";
-import {IConnextHandler} from "nxtp/core/connext/interfaces/IConnextHandler.sol";
-import {IExecutor} from "nxtp/core/connext/interfaces/IExecutor.sol";
-import {CallParams, XCallArgs} from "nxtp/core/connext/libraries/LibConnextStorage.sol";
+import {IConnextHandler, CallParams, XCallArgs} from "./interfaces/IConnextHandler.sol";
+import {IExecutor} from "./interfaces/IExecutor.sol";
 import {IConstantFlowAgreementV1} from "sf/interfaces/agreements/IConstantFlowAgreementV1.sol";
 import {
     ISuperfluid,
@@ -25,7 +24,7 @@ contract OriginPool {
         int96 flowRateAdjusted
     );
 
-    int96 public constant feeRate = 10; // 0.1%
+    event RebalanceMessageSent(uint256 amount);
 
     uint32 public immutable originDomain;
     uint32 public immutable destinationDomain;
@@ -63,7 +62,7 @@ contract OriginPool {
         token = _token;
 
         // surely this can't go wrong
-        IERC20(_token.getUnderlyingToken()).approve(address(_connext), type(uint256).max);
+        ERC20(_token.getUnderlyingToken()).approve(address(_connext), type(uint256).max);
 
         _host.registerApp(
             SuperAppDefinitions.APP_LEVEL_FINAL |
@@ -73,6 +72,16 @@ contract OriginPool {
         );
     }
 
+    // //////////////////////////////////////////////////////////////
+    // REBALANCER
+    // //////////////////////////////////////////////////////////////
+    function rebalance() external {
+        _sendRebalanceMessage();
+    }
+
+    // //////////////////////////////////////////////////////////////
+    // SUPER APP CALLBACKS
+    // //////////////////////////////////////////////////////////////
     function afterAgreementCreated(
         ISuperToken superToken,
         address agreementClass,
@@ -122,19 +131,57 @@ contract OriginPool {
         return ctx;
     }
 
+    // //////////////////////////////////////////////////////////////
+    // MESSAGE SENDERS
+    // //////////////////////////////////////////////////////////////
+    function _sendRebalanceMessage() internal {
+        uint256 balance = token.balanceOf(address(this));
+
+        bytes memory callData = abi.encodeWithSelector(
+            IDestinationPool.receiveRebalanceMessage.selector
+        );
+
+        token.downgrade(balance);
+
+        CallParams memory params = CallParams({
+            to: destination,
+            callData: callData,
+            originDomain: originDomain,
+            destinationDomain: destinationDomain,
+            recovery: destination,
+            callback: address(0),
+            callbackFee: 0,
+            forceSlow: true,
+            receiveLocal: false
+        });
+
+        XCallArgs memory xCallArgs = XCallArgs({
+            params: params,
+            transactingAssetId: token.getUnderlyingToken(),
+            amount: balance,
+            relayerFee: 0
+        });
+
+        connext.xcall(xCallArgs);
+
+        emit RebalanceMessageSent(balance);
+    }
+
     function _sendFlowMessage(address account, int96 flowRate) internal {
-        int96 flowRateAdjusted = _adjustFlowRate(flowRate);
+        uint256 buffer;
 
-        // we take a second buffer for the outpool
-        uint256 buffer = cfa.getDepositRequiredForFlowRate(token, flowRateAdjusted);
+        if (flowRate > 0) {
+            // we take a second buffer for the outpool
+            buffer = cfa.getDepositRequiredForFlowRate(token, flowRate);
 
-        token.transferFrom(account, address(this), buffer);
+            token.transferFrom(account, address(this), buffer);
 
-        token.downgrade(buffer);
+            token.downgrade(buffer);
+        }
 
         bytes memory callData = abi.encodeCall(
             IDestinationPool(destination).receiveFlowMessage,
-            (account, flowRateAdjusted)
+            (account, flowRate)
         );
 
         CallParams memory params = CallParams({
@@ -158,10 +205,6 @@ contract OriginPool {
 
         connext.xcall(xCallArgs);
 
-        emit FlowMessageSent(account, flowRate, flowRateAdjusted);
-    }
-
-    function _adjustFlowRate(int96 flowRate) internal pure returns (int96) {
-        return flowRate + (flowRate * feeRate / 10000);
+        emit FlowMessageSent(account, flowRate, flowRate);
     }
 }
