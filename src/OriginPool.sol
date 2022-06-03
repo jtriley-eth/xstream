@@ -42,7 +42,7 @@ contract OriginPool {
     uint32 public immutable destinationDomain;
 
     /// @dev Destination contract address
-    address public immutable destination;
+    address public destination;
 
     /// @dev Connext contracts.
     IConnextHandler public immutable connext;
@@ -91,6 +91,15 @@ contract OriginPool {
             SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
             SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP
         );
+    }
+
+    // demoday hack. rm this pls lmao.
+    bool done;
+    error Done();
+    function setDomain(address _destination) external {
+        if (done) revert Done();
+        done = true;
+        destination = _destination;
     }
 
     // //////////////////////////////////////////////////////////////
