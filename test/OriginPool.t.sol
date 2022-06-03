@@ -2,7 +2,10 @@
 pragma solidity ^0.8.13;
 
 import {ISuperToken, ISuperTokenFactory} from "sf/interfaces/superfluid/ISuperfluid.sol";
-import {SuperfluidFrameworkDeployer} from "sf/utils/SuperfluidFrameworkDeployer.sol";
+import {
+    SuperfluidFrameworkDeployer,
+    ERC20WithTokenInfo
+} from "sf/utils/SuperfluidFrameworkDeployer.sol";
 import {ERC1820RegistryCompiled} from "sf/libs/ERC1820RegistryCompiled.sol";
 import {IERC20} from "oz/token/ERC20/ERC20.sol";
 import {Test} from "std/Test.sol";
@@ -53,7 +56,7 @@ contract OriginPoolTest is Test {
         // SUPER TOKEN
         superToken = ISuperToken(
             sf.superTokenFactory.createERC20Wrapper(
-                underlyingToken,
+                ERC20WithTokenInfo(address(underlyingToken)),
                 18,
                 ISuperTokenFactory.Upgradability.SEMI_UPGRADABLE,
                 "Super My Token",

@@ -2,7 +2,10 @@
 pragma solidity ^0.8.13;
 
 import {ISuperToken, ISuperTokenFactory} from "sf/interfaces/superfluid/ISuperfluid.sol";
-import {SuperfluidFrameworkDeployer} from "sf/utils/SuperfluidFrameworkDeployer.sol";
+import {
+    SuperfluidFrameworkDeployer,
+    ERC20WithTokenInfo
+} from "sf/utils/SuperfluidFrameworkDeployer.sol";
 import {ERC1820RegistryCompiled} from "sf/libs/ERC1820RegistryCompiled.sol";
 import {Test} from "std/Test.sol";
 
@@ -58,8 +61,7 @@ contract DestinationPoolTest is Test {
         // SUPER TOKEN
         superToken = ISuperToken(
             sf.superTokenFactory.createERC20Wrapper(
-                underlyingToken,
-                18,
+                ERC20WithTokenInfo(address(underlyingToken)),
                 ISuperTokenFactory.Upgradability.SEMI_UPGRADABLE,
                 "Super My Token",
                 "MyTx"
@@ -115,14 +117,15 @@ contract DestinationPoolTest is Test {
             callData: callData
         });
 
-        vm.expectEmit(true, false, false, true, address(destinationPool));
+        vm.expectEmit(true, false, false, false, address(destinationPool));
         emit FlowMessageReceived(alice, flowRate);
 
         executorMock.execute(executorArgs);
 
         (, int96 createdFlowRate, , ) = sf.cfa.getFlow(superToken, address(destinationPool), alice);
 
-        assertEq(flowRate, createdFlowRate);
+        int96 expectedFlowRate = flowRate - (flowRate * 10 / 10000);
+        assertEq(expectedFlowRate, createdFlowRate);
     }
 
     function testReceiveRebalanceMessage() external {

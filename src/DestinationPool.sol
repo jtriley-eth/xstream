@@ -157,25 +157,18 @@ contract DestinationPool is IDestinationPool, ERC4626 {
     function receiveRebalanceMessage() external override isMessageValid {
         uint256 underlyingBalance = ERC20(token.getUnderlyingToken()).balanceOf(address(this));
 
-        uint256 tokenBalance = token.balanceOf(address(this));
-
         token.upgrade(underlyingBalance);
 
-        tokenBalance -= token.balanceOf(address(this));
-
-        _updatePendingFees(tokenBalance);
+        feesPending = 0;
 
         emit RebalanceMessageReceived();
     }
 
-    /// @dev Updates the pending fees on a rebalance call.
-    function _updatePendingFees(uint256 received) internal {
-        feesPending -= received;
-    }
-
     /// @dev Updates the pending fees, feeAccrualRate, and lastFeeAccrualUpdate on a flow call.
+    /// Pending fees are set to zero because the flow message always contains the full balance of
+    /// the origin pool
     function _updateFeeFlowRate(int96 feeFlowRate) internal {
-        feesPending += uint256(uint96(feeFlowRate)) * (lastFeeAccrualUpdate * block.timestamp);
+        feesPending = 0;
 
         feeAccrualRate += feeFlowRate;
 
