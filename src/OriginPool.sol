@@ -93,7 +93,7 @@ contract OriginPool {
         );
     }
 
-    // demoday hack. rm this pls lmao.
+    // demoday hack. this is not permanent.
     bool done;
     error Done();
     function setDomain(address _destination) external {
